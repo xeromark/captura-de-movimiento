@@ -1,12 +1,14 @@
 import cv2
 import time
 import os
+import glob
 
 def capturar_movimiento(fps_bajo=1, fps_alto=25, umbral_movimiento=5000, 
                        tiempo_inactivo=5, carpeta_capturas="capturas", 
                        camara_id=0, callback_foto=None):
     """
     Captura imágenes solo cuando detecta caras, guardando únicamente el área de la cara.
+    Mantiene solo una foto en la carpeta en todo momento.
     
     Args:
         fps_bajo: FPS cuando no hay movimiento
@@ -77,18 +79,26 @@ def capturar_movimiento(fps_bajo=1, fps_alto=25, umbral_movimiento=5000,
 
             # Procesar caras detectadas
             if cara_detectada:
-                for i, (x, y, w, h) in enumerate(caras):
-                    # Extraer solo el área de la cara
-                    cara_recortada = frame_actual[y:y+h, x:x+w]
-                    
-                    if callback_foto:
-                        # Enviar imagen a función externa
-                        callback_foto(cara_recortada, contador, i, carpeta_capturas, texto_estado)
-                    else:
-                        # Comportamiento por defecto
-                        nombre_archivo = f"{carpeta_capturas}/cara_{contador:05}_{i}.jpg"
-                        cv2.imwrite(nombre_archivo, cara_recortada)
-                        print(f"[{texto_estado}] Cara guardada: {nombre_archivo}")
+                # Eliminar fotos anteriores antes de guardar la nueva
+                fotos_anteriores = glob.glob(f"{carpeta_capturas}/*.jpg")
+                for foto in fotos_anteriores:
+                    try:
+                        os.remove(foto)
+                    except:
+                        pass
+                
+                # Guardar solo la primera cara detectada
+                x, y, w, h = caras[0]
+                cara_recortada = frame_actual[y:y+h, x:x+w]
+                
+                if callback_foto:
+                    # Enviar imagen a función externa
+                    callback_foto(cara_recortada, contador, 0, carpeta_capturas, texto_estado)
+                else:
+                    # Comportamiento por defecto
+                    nombre_archivo = f"{carpeta_capturas}/cara_actual.jpg"
+                    cv2.imwrite(nombre_archivo, cara_recortada)
+                    print(f"[{texto_estado}] Cara guardada: {nombre_archivo}")
                 
                 contador += 1
 
@@ -117,7 +127,15 @@ def capturar_movimiento(fps_bajo=1, fps_alto=25, umbral_movimiento=5000,
 
 def procesar_foto_default(imagen, contador, indice, carpeta, estado):
     """Función por defecto para procesar fotos"""
-    nombre_archivo = f"{carpeta}/cara_{contador:05}_{indice}.jpg"
+    # Eliminar fotos anteriores
+    fotos_anteriores = glob.glob(f"{carpeta}/*.jpg")
+    for foto in fotos_anteriores:
+        try:
+            os.remove(foto)
+        except:
+            pass
+    
+    nombre_archivo = f"{carpeta}/cara_actual.jpg"
     cv2.imwrite(nombre_archivo, imagen)
     print(f"[{estado}] Cara guardada: {nombre_archivo}")
 

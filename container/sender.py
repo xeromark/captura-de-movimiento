@@ -2,7 +2,33 @@ import os
 import requests
 import time
 from pathlib import Path
+from typing import Optional
+import base64
+params = {
+    "carpeta_capturas": "capturas",
+    "ip_destino": "192.168.1.100",
+    "puerto": 8080,
+    "endpoint": "/upload"
+}
 
+def enviar_imagen_post(foto_path, ip_destino, puerto, endpoint="/comparar"):
+    """
+    Envía una imagen al endpoint /comparar como base64 en JSON, según app.py.
+    """
+    url = f"http://{ip_destino}:{puerto}{endpoint}"
+    with open(foto_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode("utf-8")
+    payload = {"foto": img_b64}
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            print(f"✓ Enviada y comparada: {os.path.basename(foto_path)}")
+            print("Respuesta:", response.json())
+        else:
+            print(f"✗ Error enviando {os.path.basename(foto_path)}: {response.status_code}")
+            print("Respuesta:", response.text)
+    except Exception as e:
+        print(f"✗ Error enviando {os.path.basename(foto_path)}: {e}")
 def enviar_imagenes_a_ip(carpeta_capturas="capturas", ip_destino="192.168.1.100", puerto=8080, endpoint="/upload"):
     """
     Envía todas las imágenes de la carpeta de capturas a una IP específica.
@@ -62,54 +88,44 @@ def enviar_imagenes_a_ip(carpeta_capturas="capturas", ip_destino="192.168.1.100"
 
 def monitorear_y_enviar(carpeta_capturas="capturas", ip_destino="192.168.1.100", puerto=8080, intervalo=10):
     """
-    Monitorea la carpeta y envía nuevas imágenes automáticamente.
-    
-    Args:
-        carpeta_capturas: Carpeta a monitorear
-        ip_destino: IP del servidor destino
-        puerto: Puerto del servidor
-        intervalo: Segundos entre verificaciones
+    Monitorea la carpeta y envía automáticamente nuevas imágenes usando ambos métodos:
+    - Como archivo (multipart/form-data)
+    - Como base64 en JSON (POST)
     """
     enviadas_anteriormente = set()
-    
-    print(f"Monitoreando {carpeta_capturas} cada {intervalo} segundos...")
-    print(f"Enviando a http://{ip_destino}:{puerto}/upload")
+    print(f"Monitoreando {carpeta_capturas} cada {intervalo} segundos (ambos métodos)...")
+    print(f"Enviando a http://{ip_destino}:{puerto}/upload y /comparar")
     print("Presiona Ctrl+C para detener")
-    
     try:
         while True:
             if os.path.exists(carpeta_capturas):
                 extensiones = ('.jpg', '.jpeg', '.png', '.bmp')
-                imagenes_actuales = set(f for f in os.listdir(carpeta_capturas) 
-                                      if f.lower().endswith(extensiones))
-                
+                imagenes_actuales = set(f for f in os.listdir(carpeta_capturas)
+                                        if f.lower().endswith(extensiones))
                 nuevas_imagenes = imagenes_actuales - enviadas_anteriormente
-                
                 if nuevas_imagenes:
                     print(f"\nEncontradas {len(nuevas_imagenes)} nuevas imágenes")
-                    
                     for imagen in nuevas_imagenes:
                         ruta_imagen = os.path.join(carpeta_capturas, imagen)
-                        url = f"http://{ip_destino}:{puerto}/upload"
-                        
+                        # Enviar como archivo
+                        url_upload = f"http://{ip_destino}:{puerto}/upload"
                         try:
                             with open(ruta_imagen, 'rb') as archivo:
                                 files = {'file': (imagen, archivo, 'image/jpeg')}
-                                response = requests.post(url, files=files, timeout=30)
-                                
+                                response = requests.post(url_upload, files=files, timeout=30)
                                 if response.status_code == 200:
-                                    print(f"✓ Enviada: {imagen}")
-                                    enviadas_anteriormente.add(imagen)
+                                    print(f"✓ Enviada (archivo): {imagen}")
                                 else:
-                                    print(f"✗ Error enviando {imagen}: {response.status_code}")
-                                    
+                                    print(f"✗ Error enviando (archivo) {imagen}: {response.status_code}")
                         except Exception as e:
-                            print(f"✗ Error enviando {imagen}: {e}")
-            
+                            print(f"✗ Error enviando (archivo) {imagen}: {e}")
+                        # Enviar como base64 JSON
+                        enviar_imagen_post(ruta_imagen, ip_destino, puerto, endpoint="/comparar")
+                        enviadas_anteriormente.add(imagen)
             time.sleep(intervalo)
-            
     except KeyboardInterrupt:
         print("\nMonitoreo detenido por el usuario")
+
 
 if __name__ == "__main__":
     # Cambiar estos valores según tu configuración

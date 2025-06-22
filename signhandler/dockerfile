@@ -23,8 +23,6 @@ RUN apt-get update && apt-get install -y \
 
 
     # Copy the container directory to the image
-COPY container/ /app/
-WORKDIR /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r req.txt

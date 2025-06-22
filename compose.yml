@@ -2,26 +2,24 @@ version: "3.8"
 
 services:
   container:
-    build:
-      context: ./container
-    container_name: container_app
+    image: python:3.9-slim
     volumes:
       - ./container:/app
-      - ./container/capturas:/app/capturas
+      - ./init.sh:/app/init.sh
     working_dir: /app
-    command: python app.py
+    command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
 
   signhandler:
-    build:
-      context: ./signhandler
+    image: python:3.9-slim
     container_name: signhandler_app
     volumes:
       - ./signhandler:/app
+      - ./init.sh:/app/init.sh
     working_dir: /app
-    command: python app.py
+    command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
     environment:
       - PYTHONUNBUFFERED=1
     ports:

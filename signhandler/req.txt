@@ -1,0 +1,9 @@
+requests
+opencv-python
+numpy
+pathlib
+flask
+psycopg2
+scikit-learn
+joblib
+cryptography

@@ -5,7 +5,6 @@ services:
     image: python:3.9-slim
     volumes:
       - ./container:/app
-      - ./init.sh:/app/init.sh
     working_dir: /app
     command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
     environment:
@@ -17,7 +16,6 @@ services:
     container_name: signhandler_app
     volumes:
       - ./signhandler:/app
-      - ./init.sh:/app/init.sh
     working_dir: /app
     command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
     environment:

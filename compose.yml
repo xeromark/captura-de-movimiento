@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  container:
+    image: python:3.9-slim
+    volumes:
+      - ./container:/app
+    working_dir: /app
+    command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  signhandler:
+    image: python:3.9-slim
+    container_name: signhandler_app
+    volumes:
+      - ./signhandler:/app
+    working_dir: /app
+    command: ["sh", "-c", "chmod +x  init.sh && ./init.sh"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "5000:5000"
+    restart: unless-stopped

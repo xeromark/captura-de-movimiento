@@ -6,7 +6,20 @@ from external_cam import capture_from_ip_camera, scan_network_for_cameras
 from camera_photo import capturar_movimiento
 from sender import monitorear_y_enviar
 import queue
+import socket
+# Permite editar el puerto y buscar puertos disponibles a partir del 8080
+def obtener_puerto_disponible(ip_destino, puerto_inicial=8080, max_puertos=20):
+    for i in range(max_puertos):
+        puerto = puerto_inicial + i
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            resultado = sock.connect_ex((ip_destino, puerto))
+            if resultado != 0:  # Puerto no está en uso
+                return puerto
+    print("No se encontró un puerto disponible en el rango.")
+    return puerto_inicial
 
+# Modifica el main para usar el puerto disponible si el usuario lo desea
 class CameraProcessor:
     def __init__(self, carpeta_capturas="capturas", ip_destino="192.168.1.100", puerto=8080):
         self.carpeta_capturas = carpeta_capturas

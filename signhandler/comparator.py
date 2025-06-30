@@ -1,32 +1,49 @@
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-import joblib
+import torch
+import torch.nn.functional as F
 
 class SignatureComparator:
-    def __init__(self, model_path):
-        # Carga el modelo previamente entrenado
-        self.model = joblib.load(model_path)
+    def __init__(self, model_path, device='cpu'):
+        self.device = torch.device(device)
+        # Carga tu modelo entrenado (state_dict o modelo completo)
+        self.model = torch.load(model_path, map_location=self.device)
+        self.model.eval()
 
     def preprocess(self, signature):
-        # Preprocesa la firma (ajusta según tu caso)
-        # Por ejemplo: normalización, reshape, etc.
-        return np.array(signature).reshape(1, -1)
+        """
+        Convierte la firma (lista/np.array) en un tensor normalizado
+        Ajusta normalización/reshape según tu caso.
+        """
+        x = torch.tensor(signature, dtype=torch.float32)
+        # ejemplo: normalizar al rango [0,1] o (x - μ) / σ
+        # x = (x - x.mean()) / (x.std() + 1e-6)
+        return x.to(self.device).unsqueeze(0)  # shape: [1, features]
 
-    def get_features(self, signature):
-        # Extrae características usando el modelo
-        processed = self.preprocess(signature)
-        features = self.model.transform(processed)
-        return features
+    def get_embedding(self, signature):
+        """
+        Pasa la firma por el modelo para obtener un embedding L2-normalizado.
+        """
+        x = self.preprocess(signature)
+        with torch.no_grad():
+            emb = self.model(x)            # shape: [1, emb_dim]
+            emb = F.normalize(emb, p=2, dim=1)
+        return emb
 
     def compare(self, signature1, signature2):
-        # Extrae características de ambas firmas
-        feat1 = self.get_features(signature1)
-        feat2 = self.get_features(signature2)
-        # Calcula la similitud coseno
-        similarity = cosine_similarity(feat1, feat2)[0][0]
-        return similarity
+        """
+        Compara dos firmas por similitud coseno de sus embeddings.
+        """
+        e1 = self.get_embedding(signature1)
+        e2 = self.get_embedding(signature2)
+        # Cosine similarity: dot product entre vectores unitarios
+        sim = torch.sum(e1 * e2, dim=1).item()
+        return sim
 
-# Ejemplo de uso:
-# comparator = SignatureComparator('ruta/al/modelo.pkl')
-# sim = comparator.compare(firma1, firma2)
-# print(f"Nivel de similitud: {sim:.2f}")
+if __name__ == "__main__":
+    # Ejemplo de uso:
+    # Carga tus firmas como listas o arrays
+    firma1_array = [0.1, 0.2, 0.3, 0.4]  # Reemplaza con tu firma real
+    firma2_array = [0.1, 0.2, 0.3, 0.5]  # Reemplaza con tu firma real
+
+    # Inicializa el comparador con la ruta a tu modelo
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    comparator = SignatureComparator('ruta/al/modelo.pt', device=device)

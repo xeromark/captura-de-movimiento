@@ -24,6 +24,18 @@ def insertar_firma(db_params, firma):
     cursor.close()
     conn.close()
 
+if __name__ == "__main__":
+    # Ejemplo de uso:
+    db_params = {
+        'dbname': 'tu_basededatos',
+        'user': 'tu_usuario',
+        'password': 'tu_contraseña',
+        'host': 'localhost',
+        'port': 5432
+    }
+    insertar_firma(db_params, 'mi_firma_digital')
+    
+
 # Ejemplo de uso:
 # db_params = {
 #     'dbname': 'tu_basededatos',

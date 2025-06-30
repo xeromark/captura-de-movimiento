@@ -24,12 +24,16 @@ import torch
 import psycopg2
 from flask import Flask, request, jsonify
 import requests
+from dotenv import load_dotenv
+from urllib.parse import urlparse
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Importar funciones específicas de los módulos como bloques de construcción
 from signhandler.siamese_network import SiameseNetwork
 from signhandler.signer import sign_image, generate_keys, capture_square_photo
 from signhandler.comparator import SignatureComparator
-from signhandler.dbhdlr import db_params, insertar_firma
 from container.external_cam import capture_from_ip_camera, scan_network_for_cameras
 from container.camera_photo import capturar_movimiento
 from container.sender import enviar_imagen_post, enviar_imagenes_a_ip, monitorear_y_enviar
@@ -37,6 +41,77 @@ from container.sender import enviar_imagen_post, enviar_imagenes_a_ip, monitorea
 # Configuración global
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 MODEL_PATH = os.path.join(ROOT, "signhandler", "model.pth")
+
+# Configuración de base de datos desde variables de entorno
+def get_db_params():
+    """Obtiene parámetros de BD desde variables de entorno o valores por defecto"""
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url:
+        # Parsear URL de conexión PostgreSQL
+        parsed = urlparse(database_url)
+        return {
+            'dbname': parsed.path[1:],  # Remover el '/' inicial
+            'user': parsed.username,
+            'password': parsed.password,
+            'host': parsed.hostname,
+            'port': parsed.port or 5432
+        }
+    else:
+        # Valores por defecto si no hay DATABASE_URL
+        return {
+            'dbname': os.getenv('DB_NAME', 'signatures'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'postgres'),
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '5432'))
+        }
+
+# Parámetros de BD globales
+db_params = get_db_params()
+
+def crear_tabla_firmas():
+    """Crea la tabla de firmas si no existe"""
+    try:
+        with psycopg2.connect(**db_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS firmas (
+                        id SERIAL PRIMARY KEY,
+                        firma TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.commit()
+                print("✅ Tabla 'firmas' verificada/creada")
+    except Exception as e:
+        print(f"⚠️ Error creando tabla de firmas: {e}")
+
+def insertar_firma_bd(firma):
+    """Inserta una firma en la base de datos"""
+    try:
+        with psycopg2.connect(**db_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO firmas (firma) VALUES (%s)", (firma,))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"❌ Error insertando firma en BD: {e}")
+        return False
+
+def probar_conexion_bd():
+    """Prueba la conexión a la base de datos"""
+    try:
+        with psycopg2.connect(**db_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT version();")
+                version = cur.fetchone()[0]
+                print(f"✅ Conexión BD exitosa: {version}")
+                return True
+    except Exception as e:
+        print(f"❌ Error conectando a BD: {e}")
+        print(f"📋 Parámetros BD: {db_params}")
+        return False
 
 class CapturaYFirma:
     """Clase principal que integra captura de cámara y procesamiento de firmas"""
@@ -50,6 +125,9 @@ class CapturaYFirma:
         
         # Crear carpeta de capturas
         os.makedirs(carpeta_capturas, exist_ok=True)
+        
+        # Crear tabla de firmas si no existe
+        crear_tabla_firmas()
         
         # Inicializar componentes de procesamiento
         self.detector_caras = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -83,7 +161,7 @@ class CapturaYFirma:
                 firma_nueva = sign_image(tmp.name, self.priv_key)
                 
                 # Guardar firma en BD
-                insertar_firma(db_params, firma_nueva)
+                insertar_firma_bd(firma_nueva)
                 
             finally:
                 tmp.close()
@@ -133,7 +211,7 @@ class CapturaYFirma:
             # Procesar imagen (generar firma y guardar en BD)
             try:
                 firma = sign_image(filepath, self.priv_key)
-                insertar_firma(db_params, firma)
+                insertar_firma_bd(firma)
                 return jsonify({"mensaje": "Imagen procesada y firma guardada", "archivo": filename}), 200
             except Exception as e:
                 return jsonify({"error": f"Error procesando imagen: {str(e)}"}), 500
@@ -169,7 +247,7 @@ class CapturaYFirma:
                 # Generar y guardar firma
                 try:
                     firma = sign_image(nombre_archivo, self.priv_key)
-                    insertar_firma(db_params, firma)
+                    insertar_firma_bd(firma)
                     print(f"✓ Cara procesada y firma guardada: {nombre_archivo}")
                 except Exception as e:
                     print(f"✗ Error procesando {nombre_archivo}: {e}")
@@ -320,7 +398,7 @@ def capturar_foto_y_procesar():
         firma = sign_image(filename, sistema.priv_key)
         
         # Guardar en BD
-        insertar_firma(db_params, firma)
+        insertar_firma_bd(firma)
         print("✅ Firma generada y guardada en base de datos")
         
         return filename, firma
@@ -365,7 +443,7 @@ def procesar_imagenes_existentes(carpeta="capturas"):
             firma = sign_image(filepath, sistema.priv_key)
             
             # Guardar en BD
-            insertar_firma(db_params, firma)
+            insertar_firma_bd(firma)
             print(f"✅ Procesada: {imagen}")
             
         except Exception as e:
@@ -416,6 +494,9 @@ def main():
     send.add_argument("--dest-ip", default="192.168.1.100", help="IP destino")
     send.add_argument("--dest-port", type=int, default=5000, help="Puerto destino")
     send.add_argument("--endpoint", default="/comparar", help="Endpoint destino")
+
+    # Probar base de datos
+    testdb = sub.add_parser("testdb", help="Prueba la conexión a la base de datos")
 
     args = p.parse_args()
 
@@ -468,6 +549,19 @@ def main():
                 puerto=args.dest_port,
                 endpoint=args.endpoint
             )
+        
+        elif args.cmd == "testdb":
+            print("🔍 Probando conexión a la base de datos...")
+            print(f"📋 DATABASE_URL: {os.getenv('DATABASE_URL', 'No configurada')}")
+            if probar_conexion_bd():
+                crear_tabla_firmas()
+                print("✅ Base de datos lista para usar")
+            else:
+                print("❌ Problemas con la base de datos")
+                print("\n💡 Sugerencias:")
+                print("  1. Verifica que PostgreSQL esté ejecutándose")
+                print("  2. Confirma las credenciales en el archivo .env")
+                print("  3. Asegúrate de que la base de datos existe")
             
     except KeyboardInterrupt:
         print("\n⏹️ Programa interrumpido por el usuario")

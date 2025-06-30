@@ -1,11 +1,13 @@
 import torch
 import torch.nn.functional as F
+from signhandler.siamese_network import SiameseNetwork
 
 class SignatureComparator:
     def __init__(self, model_path, device='cpu'):
         self.device = torch.device(device)
         # Carga tu modelo entrenado (state_dict o modelo completo)
-        self.model = torch.load(model_path, map_location=self.device)
+        # Usamos weights_only=False para permitir cargar clases personalizadas
+        self.model = torch.load(model_path, map_location=self.device, weights_only=False)
         self.model.eval()
 
     def preprocess(self, signature):

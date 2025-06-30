@@ -6,7 +6,10 @@ import tempfile
 import torch
 import psycopg2
 from flask import Flask, request, jsonify
+import torch.serialization
 
+# Importar SiameseNetwork para que esté disponible en el contexto
+from signhandler.siamese_network import SiameseNetwork
 from signer import sign_image, generate_keys
 from comparator import SignatureComparator
 from dbhdlr import db_params
@@ -14,7 +17,7 @@ from dbhdlr import db_params
 # Configuración
 HOST       = "0.0.0.0"
 PORT       = 5000
-MODEL_PATH = "/home/ignatus/Documentos/Github/captura-de-movimiento/signhandler/modelo.pt"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pth")
 DEVICE     = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 app = Flask(__name__)

@@ -262,6 +262,9 @@ def guardar_firma():
 
     if not nombre or nombre.strip() == "":
         return jsonify({"status": "error", "error": "Falta el nombre"}), 400
+    img_b64 = data.get('imagen')
+    if not img_b64:
+        return jsonify({"status": "error", "error": "Falta imagen"}), 400
 
     try:
         print(f"📸 Intentando capturar imagen para '{nombre}'...")
@@ -312,6 +315,12 @@ def guardar_firma():
                 "nombre_detectado": nombre_existente if is_known else "Nuevo",
                 "posicion_cara": f"({x},{y},{w},{h})"
             }), 200
+        cara = img[y:y+h, x:x+w]
+
+        firma_b64 = sistema.embedding_generator.generate_embedding(cara)
+
+        if sistema.insertar_firma(firma_b64):
+            return jsonify({"status": "ok", "firma": firma_b64}), 200
         else:
             return jsonify({
                 "status": "error", 

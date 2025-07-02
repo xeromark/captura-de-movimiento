@@ -103,12 +103,13 @@ def probar_conexion_bd():
         return False
 
 class IntegratedSystem:
-    def __init__(self, model_path=MODEL_PATH, device=DEVICE, face_threshold=0.7, distance_threshold=2.5):
+    def __init__(self, model_path=MODEL_PATH, device=DEVICE, face_threshold=0.7, distance_threshold=0.45):
         # Inicializar componentes
         self.model_path = model_path
         self.device = device
         self.face_threshold = face_threshold  # Threshold para detección de rostros
-        self.distance_threshold = distance_threshold  # Threshold para comparación de firmas (distancia euclidiana)
+        self.distance_threshold = distance_threshold  # Threshold para comparación de firmas (≈80% similitud)
+        self.min_similarity_percentage = 80.0  # Porcentaje mínimo requerido para reconocimiento
         self.running = False
         self.frame_queue = queue.Queue(maxsize=10)
         self.carpeta_capturas = os.path.join(ROOT, "capturas")
@@ -245,9 +246,6 @@ class IntegratedSystem:
             promedio = sum(distancias) / len(distancias)
             print(f"📊 Discord Logic - Min: {min_distance:.3f}, Max: {max_distance:.3f}, Promedio: {promedio:.3f}, Total: {len(distancias)}")
         
-        # Lógica exacta de Discord: if (distances < threshold): conocido = true
-        conocido = min_distance < self.distance_threshold
-        
         # Calcular porcentaje de similitud (inverso de la distancia normalizada)
         if min_distance == float('inf'):
             similarity_percentage = 0.0
@@ -255,6 +253,18 @@ class IntegratedSystem:
             # Normalizar distancia a un porcentaje (0-100%)
             # Distancia 0 = 100% similitud, distancia alta = 0% similitud
             similarity_percentage = max(0, 100 * math.exp(-min_distance / 2))
+        
+        # Lógica mejorada: DOBLE VERIFICACIÓN para 80% de seguridad
+        # 1. Verificar que la distancia esté por debajo del threshold
+        # 2. Verificar que el porcentaje de similitud sea >= 80%
+        conocido_por_distancia = min_distance < self.distance_threshold
+        conocido_por_porcentaje = similarity_percentage >= self.min_similarity_percentage
+        conocido = conocido_por_distancia and conocido_por_porcentaje
+        
+        # 📊 Debug detallado para el nuevo sistema
+        print(f"🔍 SEGURIDAD 80% - Distancia: {min_distance:.3f} < {self.distance_threshold:.3f} = {conocido_por_distancia}")
+        print(f"🔍 SEGURIDAD 80% - Similitud: {similarity_percentage:.1f}% >= {self.min_similarity_percentage:.1f}% = {conocido_por_porcentaje}")
+        print(f"🔍 SEGURIDAD 80% - RESULTADO FINAL: {conocido} (requiere AMBAS condiciones)")
         
         return firma_mas_similar, min_distance, conocido, similarity_percentage
     
@@ -523,8 +533,8 @@ def main():
     parser.add_argument("--password", help="Contraseña para la cámara IP (opcional)")
     parser.add_argument("--face-threshold", type=float, default=0.7, 
                         help="Threshold para detección de rostros (default: 0.7)")
-    parser.add_argument("--distance-threshold", type=float, default=2.5,
-                        help="Threshold de distancia para clasificar firmas como conocidas (default: 2.5)")
+    parser.add_argument("--distance-threshold", type=float, default=0.45,
+                        help="Threshold de distancia para clasificar firmas como conocidas - 80% seguridad (default: 0.45)")
     parser.add_argument("--testdb", action="store_true", help="Solo probar conexión a BD")
     args = parser.parse_args()
     

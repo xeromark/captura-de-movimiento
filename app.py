@@ -41,7 +41,7 @@ from container.sender import enviar_imagen_post, enviar_imagenes_a_ip, monitorea
 
 # Configuración global
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-MODEL_PATH = os.path.join(ROOT, "signhandler", "model_fixed.pth")
+MODEL_PATH = os.path.join(ROOT, "signhandler", "model.pth")
 
 # Configuración de base de datos desde variables de entorno
 def get_db_params():

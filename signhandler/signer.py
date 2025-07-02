@@ -11,10 +11,17 @@ class FaceEmbeddingGenerator:
     def __init__(self, model_path, device='cpu'):
         self.device = torch.device(device)
         
-        # Crear instancia del modelo y cargar pesos desde el modelo arreglado
-        self.model = SiameseNetwork(embedding_size=128)
-        state_dict = torch.load(model_path, map_location=self.device)
-        self.model.load_state_dict(state_dict)
+        # Truco para cargar modelo con referencia __main__.SiameseNetwork
+        import __main__
+        __main__.SiameseNetwork = SiameseNetwork
+        
+        try:
+            # Cargar el modelo original
+            self.model = torch.load(model_path, map_location=self.device, weights_only=False)
+        finally:
+            # Limpiar la referencia temporal
+            if hasattr(__main__, 'SiameseNetwork'):
+                delattr(__main__, 'SiameseNetwork')
         
         self.model.to(self.device)
         self.model.eval()

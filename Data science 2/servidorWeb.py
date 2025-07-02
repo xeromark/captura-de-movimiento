@@ -56,10 +56,8 @@ def video_feed():
 def guardar_firma():
     data = request.get_json()
     img_b64 = data.get('imagen')
-    nombre = data.get('nombre')
-
-    if not img_b64 or not nombre:
-        return jsonify({"status": "error", "error": "Faltan datos"}), 400
+    if not img_b64:
+        return jsonify({"status": "error", "error": "Falta imagen"}), 400
 
     try:
         img_bytes = base64.b64decode(img_b64.split(",")[1])
@@ -77,7 +75,7 @@ def guardar_firma():
 
         firma_b64 = sistema.embedding_generator.generate_embedding(cara)
 
-        if sistema.insertar_firma(firma_b64, nombre):
+        if sistema.insertar_firma(firma_b64):
             return jsonify({"status": "ok", "firma": firma_b64}), 200
         else:
             return jsonify({"status": "error", "error": "No se pudo guardar firma"}), 500

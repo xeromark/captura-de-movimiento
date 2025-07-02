@@ -102,11 +102,12 @@ def probar_conexion_bd():
         return False
 
 class IntegratedSystem:
-    def __init__(self, model_path=MODEL_PATH, device=DEVICE, face_threshold=0.7):
+    def __init__(self, model_path=MODEL_PATH, device=DEVICE, face_threshold=0.7, distance_threshold=1.0):
         # Inicializar componentes
         self.model_path = model_path
         self.device = device
         self.face_threshold = face_threshold  # Threshold para detección de rostros
+        self.distance_threshold = distance_threshold  # Threshold para comparación de firmas (distancia euclidiana)
         self.running = False
         self.frame_queue = queue.Queue(maxsize=10)
         self.carpeta_capturas = os.path.join(ROOT, "capturas")
@@ -131,6 +132,7 @@ class IntegratedSystem:
         # Cargar detector de caras
         self.detector_caras = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         print(f"🎯 Threshold de detección facial: {self.face_threshold}")
+        print(f"📏 Threshold de distancia de firmas: {self.distance_threshold}")
         
         # Cargar firmas de la base de datos
         self.firmas_db = self.obtener_firmas_db()
@@ -163,23 +165,25 @@ class IntegratedSystem:
             return False
     
     def comparar_firma_con_db(self, firma_nueva):
-        """Compara una firma con todas las almacenadas en la DB."""
+        """Compara una firma con todas las almacenadas en la DB usando distancia euclidiana."""
         if not self.firmas_db:
-            return None, 0.0
+            return None, float('inf'), False
         
-        max_sim = -1.0
+        min_distance = float('inf')
         firma_mas_similar = None
         
         for firma_db in self.firmas_db:
             try:
-                sim = self.comparator.compare(firma_nueva, firma_db)
-                if sim > max_sim:
-                    max_sim = sim
+                distance = self.comparator.compare(firma_nueva, firma_db)
+                if distance < min_distance:
+                    min_distance = distance
                     firma_mas_similar = firma_db
             except Exception as e:
                 continue
-                
-        return firma_mas_similar, max_sim
+        
+        # Determinar si es conocido basado en el threshold
+        is_known = min_distance < self.distance_threshold
+        return firma_mas_similar, min_distance, is_known
     
     def detectar_caras_con_threshold(self, frame_gris):
         """Detecta caras aplicando threshold de confianza"""
@@ -207,10 +211,6 @@ class IntegratedSystem:
         # Recortar la cara
         cara = frame[y:y+h, x:x+w]
         
-        # Verificar que la cara tenga un tamaño mínimo
-        if cara.shape[0] < 30 or cara.shape[1] < 30:
-            return None, 0.0
-        
         # Guardar temporalmente
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
         try:
@@ -218,27 +218,17 @@ class IntegratedSystem:
             # Generar firma
             firma = sign_image(tmp.name, self.priv_key)
             # Comparar con firmas existentes
-            _, similitud = self.comparar_firma_con_db(firma)
-            
-            # Aplicar threshold de similitud para considerarlo una coincidencia válida
-            if similitud > self.face_threshold:
-                return firma, similitud * 100  # Convertir a porcentaje
-            else:
-                return firma, similitud * 100  # Devolver de cualquier manera para mostrar
-                
+            _, distance, is_known = self.comparar_firma_con_db(firma)
+            return firma, distance, is_known
         except Exception as e:
             print(f"Error al procesar cara: {e}")
-            return None, 0.0
+            return None, float('inf'), False
         finally:
             tmp.close()
             try:
                 os.unlink(tmp.name)
             except:
                 pass
-    
-    def es_coincidencia_valida(self, similitud):
-        """Determina si una similitud es considerada una coincidencia válida"""
-        return similitud >= self.face_threshold
     
     def iniciar_captura_webcam(self):
         """Inicia la captura desde la webcam local."""
@@ -247,8 +237,7 @@ class IntegratedSystem:
             print("No se pudo acceder a la webcam local.")
             return False
         
-        print(f"Webcam conectada. Threshold: {self.face_threshold}")
-        print("Presiona 'espacio' para guardar firma, 'q' para salir.")
+        print("Webcam conectada. Presiona 'espacio' para guardar firma, 'q' para salir.")
         self.running = True
         
         while self.running:
@@ -259,27 +248,22 @@ class IntegratedSystem:
             
             # Convertir a escala de grises para detección
             gris = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # Detectar caras con threshold
-            caras = self.detectar_caras_con_threshold(gris)
+            # Detectar caras
+            caras = self.detector_caras.detectMultiScale(gris, 1.1, 4)
             
             # Procesar cada cara
             for (x, y, w, h) in caras:
                 # Procesar cara solo si tenemos comparador
                 if self.comparator:
-                    firma, similitud = self.procesar_cara(frame, x, y, w, h)
+                    firma, distance, is_known = self.procesar_cara(frame, x, y, w, h)
                     
-                    # Determinar color del rectángulo según threshold
-                    if self.es_coincidencia_valida(similitud / 100):
-                        color = (0, 255, 0)  # Verde para coincidencias válidas
-                        texto = f"MATCH: {similitud:.2f}%"
-                    else:
-                        color = (0, 165, 255)  # Naranja para similitudes bajas
-                        texto = f"{similitud:.2f}%"
-                    
-                    # Dibujar rectángulo con color según threshold
+                    # Determinar color del rectángulo basado en si es conocido
+                    color = (0, 255, 0) if is_known else (0, 0, 255)  # Verde para conocido, rojo para desconocido
                     cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
                     
-                    # Mostrar porcentaje de similitud
+                    # Mostrar distancia y estado
+                    status = "CONOCIDO" if is_known else "DESCONOCIDO"
+                    texto = f"{status} (d={distance:.3f})"
                     cv2.putText(frame, texto, (x, y-10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, 
                                 color, 2)
@@ -289,19 +273,14 @@ class IntegratedSystem:
                     if key == 32:  # Tecla espacio
                         if firma:
                             if self.insertar_firma(firma):
-                                print(f"Firma guardada para cara en ({x},{y}) - Similitud: {similitud:.2f}%")
+                                print(f"Firma guardada para cara en ({x},{y}) - {status}")
                                 # Guardar imagen de la cara
-                                img_path = os.path.join(self.carpeta_capturas, f"cara_{time.time():.0f}.jpg")
+                                img_path = os.path.join(self.carpeta_capturas, f"cara_{status.lower()}_{time.time()}.jpg")
                                 cv2.imwrite(img_path, frame[y:y+h, x:x+w])
                                 print(f"Imagen guardada en {img_path}")
                 else:
-                    # Si no hay comparador, solo dibujar rectángulo básico
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
-            
-            # Mostrar información del threshold en pantalla
-            info_text = f"Threshold: {self.face_threshold} | Caras: {len(caras)}"
-            cv2.putText(frame, info_text, (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    # Si no hay comparador, solo dibujar rectángulo verde
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
             
             # Mostrar frame
             cv2.imshow("Captura de Caras", frame)
@@ -358,17 +337,23 @@ class IntegratedSystem:
                         
                         # Procesar cada cara
                         for (x, y, w, h) in caras:
-                            # Dibujar rectángulo
-                            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                            
                             # Procesar cara solo si tenemos comparador
                             if self.comparator:
-                                firma, similitud = self.procesar_cara(frame, x, y, w, h)
-                                # Mostrar porcentaje de similitud
-                                texto = f"{similitud:.2f}%"
+                                firma, distance, is_known = self.procesar_cara(frame, x, y, w, h)
+                                
+                                # Determinar color del rectángulo basado en si es conocido
+                                color = (0, 255, 0) if is_known else (0, 0, 255)  # Verde para conocido, rojo para desconocido
+                                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+                                
+                                # Mostrar distancia y estado
+                                status = "CONOCIDO" if is_known else "DESCONOCIDO"
+                                texto = f"{status} (d={distance:.3f})"
                                 cv2.putText(frame, texto, (x, y-10), 
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, 
-                                            (0, 255, 0), 2)
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, 
+                                            color, 2)
+                            else:
+                                # Si no hay comparador, solo dibujar rectángulo verde
+                                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                         
                         # Mostrar frame
                         cv2.imshow("Captura de Caras (IP)", frame)
@@ -382,12 +367,13 @@ class IntegratedSystem:
                             # Guardar la última cara procesada
                             if caras.size > 0:
                                 x, y, w, h = caras[0]
-                                firma, _ = self.procesar_cara(frame, x, y, w, h)
+                                firma, distance, is_known = self.procesar_cara(frame, x, y, w, h)
                                 if firma:
                                     if self.insertar_firma(firma):
-                                        print(f"Firma guardada para cara en ({x},{y})")
+                                        status = "CONOCIDO" if is_known else "DESCONOCIDO"
+                                        print(f"Firma guardada para cara en ({x},{y}) - {status}")
                                         # Guardar imagen de la cara
-                                        img_path = os.path.join(self.carpeta_capturas, f"cara_{time.time()}.jpg")
+                                        img_path = os.path.join(self.carpeta_capturas, f"cara_{status.lower()}_{time.time()}.jpg")
                                         cv2.imwrite(img_path, frame[y:y+h, x:x+w])
                                         print(f"Imagen guardada en {img_path}")
                     
@@ -404,66 +390,18 @@ class IntegratedSystem:
 
 def main():
     parser = argparse.ArgumentParser(description="Sistema Integrado de Captura de Movimiento y Procesamiento de Firmas")
-    
-    # Crear subparsers para diferentes modos
-    subparsers = parser.add_subparsers(dest='mode', help='Modos de operación disponibles')
-    
-    # Modo cámara (por defecto)
-    camera_parser = subparsers.add_parser('camera', help='Modo cámara con detección facial')
-    camera_parser.add_argument("--ip", help="Dirección IP de la cámara (opcional)")
-    camera_parser.add_argument("--username", help="Usuario para la cámara IP (opcional)")
-    camera_parser.add_argument("--password", help="Contraseña para la cámara IP (opcional)")
-    camera_parser.add_argument("--face-threshold", type=float, default=0.7, 
-                              help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
-    
-    # Modo servidor API
-    server_parser = subparsers.add_parser('server', help='Iniciar servidor REST API')
-    server_parser.add_argument("--port", type=int, default=5000, help="Puerto del servidor (default: 5000)")
-    server_parser.add_argument("--face-threshold", type=float, default=0.7, 
-                              help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
-    
-    # Modo foto (captura única)
-    photo_parser = subparsers.add_parser('foto', help='Captura una foto con detección facial')
-    photo_parser.add_argument("--output", "-o", help="Archivo de salida (opcional)")
-    photo_parser.add_argument("--face-threshold", type=float, default=0.7, 
-                             help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
-    
-    # Modo procesamiento
-    process_parser = subparsers.add_parser('process', help='Procesar firma desde archivo')
-    process_parser.add_argument("input_file", help="Archivo de imagen a procesar")
-    process_parser.add_argument("--face-threshold", type=float, default=0.7, 
-                               help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
-    
-    # Modo test BD
-    test_parser = subparsers.add_parser('testdb', help='Probar conexión a base de datos')
-    
-    # Modo full (completo)
-    full_parser = subparsers.add_parser('full', help='Sistema completo con todas las funciones')
-    full_parser.add_argument("--ip", help="Dirección IP de la cámara (opcional)")
-    full_parser.add_argument("--username", help="Usuario para la cámara IP (opcional)")
-    full_parser.add_argument("--password", help="Contraseña para la cámara IP (opcional)")
-    full_parser.add_argument("--face-threshold", type=float, default=0.7, 
-                            help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
-    full_parser.add_argument("--port", type=int, default=5000, help="Puerto del servidor (default: 5000)")
-    
-    # Para mantener compatibilidad con argumentos antiguos
     parser.add_argument("--ip", help="Dirección IP de la cámara (opcional)")
     parser.add_argument("--username", help="Usuario para la cámara IP (opcional)")
     parser.add_argument("--password", help="Contraseña para la cámara IP (opcional)")
     parser.add_argument("--face-threshold", type=float, default=0.7, 
-                       help="Threshold para detección de rostros (0.0-1.0, default: 0.7)")
+                        help="Threshold para detección de rostros (default: 0.7)")
+    parser.add_argument("--distance-threshold", type=float, default=1.0,
+                        help="Threshold de distancia para clasificar firmas como conocidas (default: 1.0)")
     parser.add_argument("--testdb", action="store_true", help="Solo probar conexión a BD")
-    
     args = parser.parse_args()
     
-    # Compatibilidad con modo anterior
+    # Si solo queremos probar la BD
     if args.testdb:
-        args.mode = 'testdb'
-    elif args.mode is None:
-        args.mode = 'camera'  # Modo por defecto
-    
-    # Manejar modo test BD
-    if args.mode == 'testdb':
         print("🔍 Probando conexión a la base de datos...")
         print(f"📋 DATABASE_URL: {os.getenv('DATABASE_URL', 'No configurada')}")
         print(f"📋 Parámetros: {DB_PARAMS}")
@@ -474,49 +412,11 @@ def main():
             print("❌ Problemas con la base de datos")
         return
     
-    # Validar threshold
-    if not 0.0 <= args.face_threshold <= 1.0:
-        print("❌ Error: --face-threshold debe estar entre 0.0 y 1.0")
-        return
-    
-    # Inicializar sistema con threshold configurado
-    sistema = IntegratedSystem(face_threshold=args.face_threshold)
-    
-    print(f"🎯 Modo seleccionado: {args.mode}")
-    print(f"🔍 Threshold de detección facial: {args.face_threshold}")
-    
-    # Ejecutar según el modo seleccionado
-    if args.mode == 'server':
-        print(f"🌐 Iniciando servidor en puerto {args.port}")
-        sistema.iniciar_servidor_api(puerto=args.port)
-        
-    elif args.mode == 'foto':
-        print("📸 Modo captura de foto")
-        sistema.capturar_foto_con_rostro(args.output)
-        
-    elif args.mode == 'process':
-        print(f"⚙️ Procesando archivo: {args.input_file}")
-        sistema.procesar_imagen_archivo(args.input_file)
-        
-    elif args.mode == 'full':
-        print("🔄 Modo completo: servidor + cámara")
-        # Iniciar servidor en segundo plano
-        import threading
-        servidor_thread = threading.Thread(target=sistema.iniciar_servidor_api, 
-                                         kwargs={'puerto': args.port})
-        servidor_thread.daemon = True
-        servidor_thread.start()
-        print(f"🌐 Servidor API iniciado en puerto {args.port}")
-        
-        # Iniciar cámara
-        iniciar_camara_con_args(sistema, args)
-        
-    elif args.mode == 'camera':
-        print("📹 Modo cámara con detección facial")
-        iniciar_camara_con_args(sistema, args)
-
-def iniciar_camara_con_args(sistema, args):
-    """Función auxiliar para iniciar cámara con argumentos"""
+    # Inicializar sistema con los parámetros configurados
+    sistema = IntegratedSystem(
+        face_threshold=args.face_threshold,
+        distance_threshold=args.distance_threshold
+    )
     
     # Intentar conectar a la cámara
     if args.ip:

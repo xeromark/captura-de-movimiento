@@ -32,13 +32,29 @@ class SignatureComparator:
 
     def compare(self, signature1, signature2):
         """
-        Compara dos firmas por similitud coseno de sus embeddings.
+        Compara dos firmas usando distancia euclidiana de sus embeddings.
+        Retorna la distancia (menor valor = más similar).
         """
         e1 = self.get_embedding(signature1)
         e2 = self.get_embedding(signature2)
-        # Cosine similarity: dot product entre vectores unitarios
-        sim = torch.sum(e1 * e2, dim=1).item()
-        return sim
+        # Euclidean distance usando torch.nn.functional.pairwise_distance
+        distance = F.pairwise_distance(e1, e2).item()
+        return distance
+    
+    def is_known(self, signature1, signature2, threshold=1.0):
+        """
+        Determina si dos firmas corresponden a la misma persona.
+        
+        Args:
+            signature1: Primera firma
+            signature2: Segunda firma  
+            threshold: Umbral de distancia (default: 1.0). Menor valor = más estricto
+            
+        Returns:
+            bool: True si la distancia es menor al threshold (conocido), False si no
+        """
+        distance = self.compare(signature1, signature2)
+        return distance < threshold
 
 if __name__ == "__main__":
     # Ejemplo de uso:
@@ -49,3 +65,12 @@ if __name__ == "__main__":
     # Inicializa el comparador con la ruta a tu modelo
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     comparator = SignatureComparator('ruta/al/modelo.pt', device=device)
+    
+    # Comparar usando distancia euclidiana
+    distance = comparator.compare(firma1_array, firma2_array)
+    print(f"Distancia euclidiana: {distance:.4f}")
+    
+    # Determinar si es conocido o desconocido
+    threshold = 1.0  # Ajustar según tus necesidades
+    is_same_person = comparator.is_known(firma1_array, firma2_array, threshold)
+    print(f"¿Es la misma persona? {'Sí' if is_same_person else 'No'}")

@@ -194,3 +194,4 @@ cython_debug/
 .cursorindexingignore
 
 signhandler/model.pth
+signhandler/model_fixed.pth

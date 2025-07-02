@@ -30,3 +30,12 @@ Este repositorio contiene una solución basada en contenedores para la captura, 
 Cada contenedor está diseñado para ser independiente y escalable, facilitando el mantenimiento y la ampliación del sistema.
 
 Para correr usar ```compose up```con su sistema de contenedores de preferencia.
+
+# db
+```
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/signatures
+
+docker run -d --name postgres-signatures -e POSTGRES_DB=signatures -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:latest
+
+psql -U postgres
+```

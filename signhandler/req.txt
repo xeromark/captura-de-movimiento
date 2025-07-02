@@ -7,3 +7,7 @@ psycopg2
 scikit-learn
 joblib
 cryptography
+torch
+torchvision
+pillow
+python-dotenv

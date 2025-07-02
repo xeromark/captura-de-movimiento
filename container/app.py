@@ -536,26 +536,22 @@ def main():
         processor.ejecutar_flujo_completo(ip_camera, username, password, puerto_camara)
     
     elif opcion == "3":
-        logger.info("Funcionalidad de cámara local pendiente de implementar con buffers")
-        # Aquí se implementaría la captura desde cámara local usando el mismo sistema de buffers
-    
-    elif opcion == "4":
-        logger.info("Modo de prueba - generando datos sintéticos")
-        # Modo de prueba para verificar el funcionamiento de los buffers
-        processor.pipeline.start_processing(processor.carpeta_capturas)
+        print("Usando cámara local...")
+        # Definir callback personalizado para integrar con el sender
+        # Iniciar envío automático
+        thread_envio = processor.iniciar_monitoreo_y_envio()
         
-        # Generar frames sintéticos
-        for i in range(50):
-            synthetic_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-            metadata = {'source': 'synthetic', 'frame_id': i}
-            processor.pipeline.add_frame(synthetic_frame, metadata)
-            time.sleep(0.1)
+        try:
+            # Usar función de cámara local
+            capturar_movimiento(
+            carpeta_capturas=processor.carpeta_capturas
+            )
+        except KeyboardInterrupt:
+            print("\nDeteniendo captura desde cámara local...")
+            processor.running = False
         
-        time.sleep(5)  # Esperar procesamiento
-        stats = processor.pipeline.get_pipeline_stats()
-        logger.info(f"Estadísticas de prueba: {stats}")
-        processor.pipeline.stop_processing()
-    
+        print("Captura desde cámara local finalizada")
+
     else:
         print("Opción no válida")
 

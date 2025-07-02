@@ -43,14 +43,63 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 MODEL_PATH = os.path.join(ROOT, "signhandler", "model.pth")
 
 # Configuración de base de datos desde variables de entorno
-# Configuración de base de datos desde variables de entorno
-DB_PARAMS = {
-    'dbname': os.getenv('DB_NAME', 'tu_basededatos'),
-    'user': os.getenv('DB_USER', 'tu_usuario'),
-    'password': os.getenv('DB_PASSWORD', 'tu_contraseña'),
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', 5432))
-}
+def get_db_params():
+    """Obtiene parámetros de BD desde variables de entorno o valores por defecto"""
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url:
+        # Parsear URL de conexión PostgreSQL
+        parsed = urlparse(database_url)
+        return {
+            'dbname': parsed.path[1:],  # Remover el '/' inicial
+            'user': parsed.username,
+            'password': parsed.password,
+            'host': parsed.hostname,
+            'port': parsed.port or 5432
+        }
+    else:
+        # Valores por defecto si no hay DATABASE_URL
+        return {
+            'dbname': os.getenv('DB_NAME', 'signatures'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'postgres'),
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '5432'))
+        }
+
+# Parámetros de BD globales
+DB_PARAMS = get_db_params()
+
+def crear_tabla_firmas():
+    """Crea la tabla de firmas si no existe"""
+    try:
+        with psycopg2.connect(**DB_PARAMS) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS firmas (
+                        id SERIAL PRIMARY KEY,
+                        firma TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.commit()
+                print("✅ Tabla 'firmas' verificada/creada")
+    except Exception as e:
+        print(f"⚠️ Error creando tabla de firmas: {e}")
+
+def probar_conexion_bd():
+    """Prueba la conexión a la base de datos"""
+    try:
+        with psycopg2.connect(**DB_PARAMS) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT version();")
+                version = cur.fetchone()[0]
+                print(f"✅ Conexión BD exitosa: {version}")
+                return True
+    except Exception as e:
+        print(f"❌ Error conectando a BD: {e}")
+        print(f"📋 Parámetros BD: {DB_PARAMS}")
+        return False
 
 class IntegratedSystem:
     def __init__(self, model_path=MODEL_PATH, device=DEVICE):
@@ -62,13 +111,20 @@ class IntegratedSystem:
         self.carpeta_capturas = os.path.join(ROOT, "capturas")
         os.makedirs(self.carpeta_capturas, exist_ok=True)
         
+        # Verificar conexión BD y crear tabla si es necesario
+        print(f"📋 Conectando a BD: {DB_PARAMS['host']}:{DB_PARAMS['port']}")
+        if probar_conexion_bd():
+            crear_tabla_firmas()
+        else:
+            print("⚠️ Continuando sin conexión a BD")
+        
         # Cargar el comparador
         try:
             self.comparator = SignatureComparator(self.model_path, device=self.device)
             self.priv_key, self.pub_key = generate_keys()
-            print(f"Modelo cargado correctamente desde {self.model_path}")
+            print(f"✅ Modelo cargado correctamente desde {self.model_path}")
         except Exception as e:
-            print(f"Error al cargar el modelo: {e}")
+            print(f"❌ Error al cargar el modelo: {e}")
             self.comparator = None
 
         # Cargar detector de caras
@@ -76,7 +132,7 @@ class IntegratedSystem:
         
         # Cargar firmas de la base de datos
         self.firmas_db = self.obtener_firmas_db()
-        print(f"Se cargaron {len(self.firmas_db)} firmas de la base de datos")
+        print(f"📊 Se cargaron {len(self.firmas_db)} firmas de la base de datos")
     
     def obtener_firmas_db(self):
         """Lee todas las firmas de la base de datos."""
@@ -297,7 +353,20 @@ def main():
     parser.add_argument("--ip", help="Dirección IP de la cámara (opcional)")
     parser.add_argument("--username", help="Usuario para la cámara IP (opcional)")
     parser.add_argument("--password", help="Contraseña para la cámara IP (opcional)")
+    parser.add_argument("--testdb", action="store_true", help="Solo probar conexión a BD")
     args = parser.parse_args()
+    
+    # Si solo queremos probar la BD
+    if args.testdb:
+        print("🔍 Probando conexión a la base de datos...")
+        print(f"📋 DATABASE_URL: {os.getenv('DATABASE_URL', 'No configurada')}")
+        print(f"📋 Parámetros: {DB_PARAMS}")
+        if probar_conexion_bd():
+            crear_tabla_firmas()
+            print("✅ Base de datos lista para usar")
+        else:
+            print("❌ Problemas con la base de datos")
+        return
     
     # Inicializar sistema
     sistema = IntegratedSystem()

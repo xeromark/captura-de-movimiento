@@ -5,23 +5,25 @@ from urllib.parse import urlparse
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
-def capture_from_ip_camera(ip_address, username=None, password=None):
+def capture_from_ip_camera(ip_address, port, username=None, password=None):
     """
     Capture images from an IP camera
     
     Args:
         ip_address (str): IP address of the camera
+        port (int): Port of the camera
         username (str): Username for authentication (optional)
         password (str): Password for authentication (optional)
     """
-    
+    if not port:
+        port = 8081
     # Common IP camera stream URLs
     stream_urls = [
-        f"http://{ip_address}/video/mjpg.cgi",
-        f"http://{ip_address}/mjpg/video.mjpg",
-        f"http://{ip_address}/videostream.cgi",
-        f"http://{ip_address}:8080/video",
-        f"rtsp://{ip_address}/stream1"
+        f"http://{ip_address}:{port}/video/mjpg.cgi",
+        f"http://{ip_address}:{port}/mjpg/video.mjpg",
+        f"http://{ip_address}:{port}/videostream.cgi",
+        f"http://{ip_address}:{port}/video",
+        f"rtsp://{ip_address}:{port}/stream1"
     ]
     
     # Try different stream URLs
@@ -117,13 +119,16 @@ if __name__ == "__main__":
         if cameras:
             print(f"Found potential cameras: {cameras}")
             for camera in cameras:
-                ip = camera.split(':')[0]
-                capture_from_ip_camera(ip)
+                ip, port = camera.split(':')
+                username = input(f"Username for {ip}:{port} (optional): ") or None
+                password = input(f"Password for {ip}:{port} (optional): ") or None
+                capture_from_ip_camera(ip, port, username, password)
         else:
             print("No cameras found")
     
     elif choice == "2":
         ip = input("Enter camera IP address: ")
+        port = input("Enter camera port: ")
         username = input("Username (optional): ") or None
         password = input("Password (optional): ") or None
-        capture_from_ip_camera(ip, username, password)
+        capture_from_ip_camera(ip, port, username, password)

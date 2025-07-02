@@ -1,0 +1,30 @@
+{
+    "capas": [
+        {
+            "nombre": "Capa 1",
+            "promedio_pesos": -0.003953302279114723,
+            "desviacion_pesos": 0.10975850373506546,
+            "cantidad_filtros": 64,
+            "tama\u00f1o_kernel": [
+                3,
+                3
+            ]
+        },
+        {
+            "nombre": "Capa 2",
+            "promedio_pesos": 6.608659168705344e-05,
+            "desviacion_pesos": 0.024143537506461143,
+            "cantidad_filtros": 128,
+            "tama\u00f1o_kernel": [
+                3,
+                3
+            ]
+        }
+    ],
+    "activaciones": [
+        0.2,
+        0.6,
+        0.9,
+        0.4
+    ]
+}

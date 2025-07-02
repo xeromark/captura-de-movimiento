@@ -4,26 +4,27 @@
 
 ### 🏗️ Arquitectura del Sistema
 - **Sistema integrado** en un solo ejecutable (`app.py`)
-- **Modelo de IA** funcionando correctamente con arquitectura simplificada
+- **Modelo de IA ORIGINAL** funcionando correctamente
 - **Base de datos PostgreSQL** conectada y funcionando
 - **Detección facial** con OpenCV integrada
 - **Comparación de firmas** usando distancia euclidiana (lógica de Discord)
 
 ### 🔧 Problemas Resueltos
 1. **Problema de carga del modelo PyTorch**:
-   - ❌ El modelo original tenía referencias de clase incompatibles
-   - ✅ Creado `model_fixed.pth` con `state_dict` puro
-   - ✅ Arquitectura simplificada que coincide con el modelo entrenado
+   - ❌ El modelo tenía referencias de clase `__main__.SiameseNetwork`
+   - ✅ Solucionado con truco temporal de importación en `__main__`
+   - ✅ Usando el modelo ORIGINAL sin modificaciones
 
 2. **Arquitectura del modelo**:
-   - ❌ Código original tenía 4 capas conv + batch normalization
-   - ✅ Modelo real tiene 2 capas conv sin batch normalization
-   - ✅ Dimensiones corregidas: 401408 → 512 → 128
+   - ✅ Definición de clase coincide exactamente con modelo guardado
+   - ✅ 2 capas convolucionales: 3→64→128
+   - ✅ Dimensiones exactas: 401408 → 512 → 128
+   - ✅ Sin batch normalization (como en el modelo original)
 
 3. **Carga de modelos**:
-   - ✅ `FaceEmbeddingGenerator` simplificado
-   - ✅ `SignatureComparator` simplificado
-   - ✅ Uso de `load_state_dict()` en lugar de `torch.load()` directo
+   - ✅ `FaceEmbeddingGenerator` usando modelo original
+   - ✅ `SignatureComparator` usando modelo original  
+   - ✅ Truco de importación temporal en `__main__` namespace
 
 ### 📊 Componentes Funcionales
 - ✅ **Conexión BD**: PostgreSQL con variables de entorno

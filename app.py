@@ -108,8 +108,8 @@ class IntegratedSystem:
         self.model_path = model_path
         self.device = device
         self.face_threshold = face_threshold  # Threshold para detección de rostros
-        self.distance_threshold = distance_threshold  # Threshold para comparación de firmas (≈80% similitud)
-        self.min_similarity_percentage = 80.0  # Porcentaje mínimo requerido para reconocimiento
+        self.distance_threshold = distance_threshold  # Threshold para comparación de firmas (≈85% similitud)
+        self.min_similarity_percentage = 85.0  # Porcentaje mínimo requerido para reconocimiento
         self.running = False
         self.frame_queue = queue.Queue(maxsize=10)
         self.carpeta_capturas = os.path.join(ROOT, "capturas")
@@ -254,17 +254,11 @@ class IntegratedSystem:
             # Distancia 0 = 100% similitud, distancia alta = 0% similitud
             similarity_percentage = max(0, 100 * math.exp(-min_distance / 2))
         
-        # Lógica mejorada: DOBLE VERIFICACIÓN para 80% de seguridad
-        # 1. Verificar que la distancia esté por debajo del threshold
-        # 2. Verificar que el porcentaje de similitud sea >= 80%
-        conocido_por_distancia = min_distance < self.distance_threshold
-        conocido_por_porcentaje = similarity_percentage >= self.min_similarity_percentage
-        conocido = conocido_por_distancia and conocido_por_porcentaje
+        # Lógica simplificada: SOLO VERIFICACIÓN POR PORCENTAJE DE SIMILITUD >= 85%
+        conocido = similarity_percentage >= self.min_similarity_percentage
         
-        # 📊 Debug detallado para el nuevo sistema
-        print(f"🔍 SEGURIDAD 80% - Distancia: {min_distance:.3f} < {self.distance_threshold:.3f} = {conocido_por_distancia}")
-        print(f"🔍 SEGURIDAD 80% - Similitud: {similarity_percentage:.1f}% >= {self.min_similarity_percentage:.1f}% = {conocido_por_porcentaje}")
-        print(f"🔍 SEGURIDAD 80% - RESULTADO FINAL: {conocido} (requiere AMBAS condiciones)")
+        # 📊 Debug simplificado para el nuevo sistema
+        print(f"🔍 SEGURIDAD 85% - Similitud: {similarity_percentage:.1f}% >= {self.min_similarity_percentage:.1f}% = {conocido}")
         
         return firma_mas_similar, min_distance, conocido, similarity_percentage
     
@@ -534,7 +528,7 @@ def main():
     parser.add_argument("--face-threshold", type=float, default=0.7, 
                         help="Threshold para detección de rostros (default: 0.7)")
     parser.add_argument("--distance-threshold", type=float, default=0.45,
-                        help="Threshold de distancia para clasificar firmas como conocidas - 80% seguridad (default: 0.45)")
+                        help="Threshold de distancia para clasificar firmas como conocidas - 85% seguridad (default: 0.45)")
     parser.add_argument("--testdb", action="store_true", help="Solo probar conexión a BD")
     args = parser.parse_args()
     

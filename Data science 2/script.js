@@ -183,31 +183,39 @@ document.getElementById('imgInput').addEventListener('change', e => {
 
 function guardarFirmaDesdeWeb() {
     const nombre = document.getElementById('nombreInput').value.trim();
-    if (!nombre) return alert("Ingrese un nombre válido");
+    if (!nombre) return alert("⚠️ Ingrese un nombre válido");
 
-    const video = document.getElementById('videoFeed');
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
+    // Mostrar que está procesando
+    const button = event.target;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '🔄 Capturando...';
 
-    const imgData = canvas.toDataURL('image/jpeg');
-
+    // Enviar solo el nombre, el servidor capturará la imagen de la webcam
     fetch('http://localhost:5000/guardar_firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imagen: imgData, nombre })
+        body: JSON.stringify({ nombre: nombre })
     })
     .then(r => r.json())
     .then(data => {
         if (data.status === "ok") {
-            alert("✅ Firma guardada correctamente");
+            alert(`✅ Firma guardada correctamente para "${nombre}"\n📊 Similitud: ${data.similitud.toFixed(1)}%\n${data.era_conocido ? '👤 Era conocido como: ' + data.nombre_detectado : '🆕 Nueva persona'}`);
             if (data.firma) mostrarFirmaEn3D(data.firma); 
             animarRedCompleta();
+            // Limpiar input
+            document.getElementById('nombreInput').value = '';
         } else {
-            alert("⚠️ Error al guardar firma: " + (data.error || "desconocido"));
+            alert("❌ Error al guardar firma: " + (data.error || "desconocido"));
         }
+    })
+    .catch(error => {
+        alert("❌ Error de conexión: " + error.message);
+    })
+    .finally(() => {
+        // Restaurar botón
+        button.disabled = false;
+        button.textContent = originalText;
     });
 }
 

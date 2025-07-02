@@ -171,22 +171,20 @@ def main():
     
     elif opcion == "3":
         print("Usando cámara local...")
-        
         # Definir callback personalizado para integrar con el sender
-        def callback_foto_personalizado(imagen, contador, indice, carpeta, estado):
-            nombre_archivo = f"{carpeta}/cara_{contador:05}_{indice}.jpg"
-            cv2.imwrite(nombre_archivo, imagen)
-            print(f"[{estado}] Cara guardada: {nombre_archivo}")
-        
         # Iniciar envío automático
         thread_envio = processor.iniciar_monitoreo_y_envio()
         
-        # Usar función de cámara local con callback personalizado
-        capturar_movimiento(
-            carpeta_capturas=processor.carpeta_capturas,
-            callback_foto=callback_foto_personalizado
-        )
-    
+        try:
+            # Usar función de cámara local
+            capturar_movimiento(
+            carpeta_capturas=processor.carpeta_capturas
+            )
+        except KeyboardInterrupt:
+            print("\nDeteniendo captura desde cámara local...")
+            processor.running = False
+        
+        print("Captura desde cámara local finalizada")
     else:
         print("Opción no válida")
 
